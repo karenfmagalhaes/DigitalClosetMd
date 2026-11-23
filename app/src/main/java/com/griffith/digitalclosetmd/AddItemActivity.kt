@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import java.io.File
+import android.hardware.Sensor
 
 class AddItemActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,6 +44,11 @@ fun AddItemScreen(onClose: () -> Unit) {
     var season by rememberSaveable { mutableStateOf(SEASONS[0]) }
     var photoUri by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingUri by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Light sensor
+    val hasLightSensor = rememberSensorAvailable(Sensor.TYPE_LIGHT)
+    var lux by remember { mutableStateOf<Float?>(null) }
+    SensorEffect(Sensor.TYPE_LIGHT) { lux = it[0] }
 
     // Implicit intent (ACTION_IMAGE_CAPTURE) through the Activity Result API
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->

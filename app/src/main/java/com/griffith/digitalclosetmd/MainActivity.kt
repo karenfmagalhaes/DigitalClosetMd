@@ -26,6 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Place
+import android.hardware.SensorManager
+import android.hardware.Sensor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,7 +45,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }   // 0 = Today, 1 = Closet, 2 = Outfits
+
+    // Explicit intent: open another activity of this app
+    fun open(target: Class<*>) = context.startActivity(Intent(context, target))
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Digital Closet App") }) },
@@ -47,30 +56,43 @@ fun HomeScreen() {
             NavigationBar {
                 NavigationBarItem(
                     selected = tab == 0, onClick = { tab = 0 },
+                    icon = { Icon(Icons.Default.Place, contentDescription = null) },
+                    label = { Text("Today") }
+                )
+                NavigationBarItem(
+                    selected = tab == 1, onClick = { tab = 1 },
                     icon = { Icon(Icons.Default.Home, contentDescription = null) },
                     label = { Text("Closet") }
                 )
                 NavigationBarItem(
-                    selected = tab == 1, onClick = { tab = 1 },
+                    selected = tab == 2, onClick = { tab = 2 },
                     icon = { Icon(Icons.Default.Favorite, contentDescription = null) },
                     label = { Text("Outfits") }
                 )
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    // Explicit intent: open another activity of this app
-                    val target = if (tab == 0) AddItemActivity::class.java
-                    else OutfitBuilderActivity::class.java
-                    context.startActivity(Intent(context, target))
-                },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text(if (tab == 0) "Add item" else "New outfit") }
-            )
+            // The Today screen has its own quick buttons, so the FAB is only for Closet/Outfits
+            if (tab != 0) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        open(if (tab == 1) AddItemActivity::class.java else OutfitBuilderActivity::class.java)
+                    },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text(if (tab == 1) "Add item" else "New outfit") }
+                )
+            }
         }
     ) { padding ->
-        if (tab == 0) ClosetTab(Modifier.padding(padding)) else OutfitsTab(Modifier.padding(padding))
+        when (tab) {
+            0 -> TodayTab(
+                onAddItem = { open(AddItemActivity::class.java) },
+                onCreateOutfit = { open(OutfitBuilderActivity::class.java) },
+                modifier = Modifier.padding(padding)
+            )
+            1 -> ClosetTab(Modifier.padding(padding))
+            else -> OutfitsTab(Modifier.padding(padding))
+        }
     }
 }
 
@@ -122,32 +144,84 @@ fun ClosetTab(modifier: Modifier = Modifier) {
 @Composable
 fun OutfitsTab(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    if (ClosetRepository.outfits.isEmpty()) {
-        EmptyState("No outfits saved.\nTap \"New outfit\" to combine your clothes.")
-        return
+    val haptics = LocalHapticFeedback.current
+    val hasAccelerometer = rememberSensorAvailable(Sensor.TYPE_ACCELEROMETER)
+    var suggestion by remember { mutableStateOf<Outfit?>(null) }
+
+    // Builds a season-aware random outfit; called by a shake or by the Suggest button
+    fun suggest() {
+        val next = suggestOutfit(avoid = suggestion?.itemIds ?: emptyList())
+        if (next == null) {
+            Toast.makeText(
+                context,
+                "Add at least 2 items for ${currentSeason()} (or All year) first",
+                Toast.LENGTH_LONG
+            ).show()
+        } else {
+            suggestion = next
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)   // feedback on shake
+        }
     }
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(ClosetRepository.outfits, key = { it.id }) { outfit ->
-            Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(outfit.name, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            outfit.itemIds.mapNotNull { ClosetRepository.getItem(it) }.forEach {
-                                ItemPhoto(it, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+
+    // Accelerometer (Milestone 2): only listens while the Outfits tab is on screen
+    val shakeDetector = remember { ShakeDetector(onShake = { suggest() }) }
+    SensorEffect(Sensor.TYPE_ACCELEROMETER, SensorManager.SENSOR_DELAY_GAME) {
+        shakeDetector.onValues(it)
+    }
+
+    Column(modifier.fillMaxSize()) {
+        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (hasAccelerometer) "Shake your phone for an outfit idea"
+                    else "No accelerometer found. Use the button instead.",
+                    Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { suggest() }) { Text("Suggest") }
+            }
+        }
+
+        if (ClosetRepository.outfits.isEmpty()) {
+            EmptyState("No outfits saved.\nTap \"New outfit\" to combine your clothes, or shake for an idea.")
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(ClosetRepository.outfits, key = { it.id }) { outfit ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(outfit.name, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    outfit.itemIds.mapNotNull { ClosetRepository.getItem(it) }.forEach {
+                                        ItemPhoto(it, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+                                    }
+                                }
+                            }
+                            IconButton(onClick = { shareText(context, outfitSummary(outfit)) }) {
+                                Icon(Icons.Default.Share, contentDescription = "Share outfit")
                             }
                         }
-                    }
-                    IconButton(onClick = { shareText(context, outfitSummary(outfit)) }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share outfit")
                     }
                 }
             }
         }
+    }
+
+    suggestion?.let { idea ->
+        OutfitSuggestionDialog(
+            outfit = idea,
+            onSave = {
+                ClosetRepository.addOutfit("Idea #${ClosetRepository.outfits.size + 1}", idea.itemIds)
+                Toast.makeText(context, "Outfit saved", Toast.LENGTH_SHORT).show()
+                suggestion = null
+            },
+            onShare = { shareText(context, outfitSummary(idea)) },
+            onDismiss = { suggestion = null }
+        )
     }
 }
