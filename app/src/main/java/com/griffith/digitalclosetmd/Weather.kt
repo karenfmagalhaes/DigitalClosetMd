@@ -189,6 +189,7 @@ fun TodayTab(onAddItem: () -> Unit, onCreateOutfit: () -> Unit, modifier: Modifi
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var suggestion by remember { mutableStateOf<Outfit?>(null) }
+    var suggestionSaved by remember { mutableStateOf(false) }
     val weather = WeatherRepository.weather
 
     // 1) GPS fix  2) download weather  3) show it
@@ -235,7 +236,9 @@ fun TodayTab(onAddItem: () -> Unit, onCreateOutfit: () -> Unit, modifier: Modifi
 
     // New weather -> new outfit suggestion chosen for that temperature
     LaunchedEffect(weather) {
-        suggestion = weather?.let { suggestOutfit(season = seasonForTemperature(it.tempC)) }
+        suggestion = weather?.let { suggestOutfit(season = seasonForTemperature(it.tempC))
+        }
+        suggestionSaved = false
     }
 
     Column(
@@ -314,25 +317,32 @@ fun TodayTab(onAddItem: () -> Unit, onCreateOutfit: () -> Unit, modifier: Modifi
                         OutlinedButton(
                             onClick = {
                                 suggestion = suggestOutfit(
-                                    avoid = idea?.itemIds ?: emptyList(),
+                                    avoid = suggestion?.itemIds ?: emptyList(),
                                     season = seasonForTemperature(weather.tempC)
                                 )
+                                suggestionSaved = false
                             },
                             modifier = Modifier.weight(1f)
                         ) { Text("Another idea") }
                         Button(
                             onClick = {
-                                idea?.let {
-                                    ClosetRepository.addOutfit(
-                                        "Today #${ClosetRepository.outfits.size + 1}",
-                                        it.itemIds
-                                    )
-                                    Toast.makeText(context, "Outfit saved", Toast.LENGTH_SHORT).show()
+                                suggestion?.let { outfit ->
+                                    if (!suggestionSaved) {
+                                        ClosetRepository.addOutfit(
+                                            "Today #${ClosetRepository.outfits.size + 1}",
+                                            outfit.itemIds
+                                        )
+
+                                        suggestionSaved = true
+
+                                        Toast.makeText(context, "Outfit saved", Toast.LENGTH_SHORT)
+                                            .show()
+                                    }
                                 }
                             },
-                            enabled = idea != null,
+                            enabled = suggestion != null && !suggestionSaved,
                             modifier = Modifier.weight(1f)
-                        ) { Text("Save outfit") }
+                        ) { Text(if (suggestionSaved) "Saved" else "Save outfit") }
                     }
                 }
             }

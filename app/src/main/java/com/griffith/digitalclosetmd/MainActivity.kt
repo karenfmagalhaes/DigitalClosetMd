@@ -215,6 +215,7 @@ fun OutfitsTab(modifier: Modifier = Modifier) {
     suggestion?.let { idea ->
         OutfitSuggestionDialog(
             outfit = idea,
+            season = currentSeason(),
             onSave = {
                 ClosetRepository.addOutfit("Idea #${ClosetRepository.outfits.size + 1}", idea.itemIds)
                 Toast.makeText(context, "Outfit saved", Toast.LENGTH_SHORT).show()

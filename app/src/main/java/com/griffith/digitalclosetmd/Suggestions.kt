@@ -57,6 +57,7 @@ fun suggestOutfit(avoid: List<Int> = emptyList(), season: String = currentSeason
 @Composable
 fun OutfitSuggestionDialog(
     outfit: Outfit,
+    season: String,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onDismiss: () -> Unit
@@ -65,7 +66,7 @@ fun OutfitSuggestionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Outfit idea for ${currentSeason()}") },
+        title = { Text("Outfit idea for $season") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

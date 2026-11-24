@@ -38,6 +38,16 @@ object ClosetRepository {
     }
 
     fun getItem(id: Int): ClothingItem? = items.firstOrNull { it.id == id }
+
+    fun deleteItem(itemId: Int) {
+        items.removeAll { it.id == itemId }
+        outfits.replaceAll { outfit ->
+            outfit.copy(
+                itemIds = outfit.itemIds.filterNot { it == itemId }
+            )
+        }
+        outfits.removeAll { it.itemIds.size < 2 }
+    }
 }
 
 fun outfitSummary(outfit: Outfit): String {
@@ -54,3 +64,6 @@ fun shareText(context: Context, text: String) {
     }
     context.startActivity(Intent.createChooser(send, "Share"))
 }
+
+
+

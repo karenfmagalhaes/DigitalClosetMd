@@ -52,7 +52,8 @@ fun ItemDetailScreen(item: ClothingItem, onClose: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Share item") }
             TextButton(
-                onClick = { ClosetRepository.items.remove(item); onClose() },
+                onClick = { ClosetRepository.deleteItem(item.id)
+                    onClose() },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Delete item", color = MaterialTheme.colorScheme.error) }
         }
